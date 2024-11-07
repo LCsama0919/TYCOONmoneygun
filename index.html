@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Money Gun Example</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        /* 控制面板的样式 */
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        /* 滑块和按钮的样式 */
+        input[type=range], button {
+            width: 200px;
+            margin: 5px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="intervalRange">喷射间隔: <span id="intervalValue">500</span> ms</label>
+        <input type="range" id="intervalRange" min="100" max="2000" step="100" value="500">
+        
+        <label for="speedRange">射出速度: <span id="speedValue">1.0</span></label>
+        <input type="range" id="speedRange" min="0.1" max="5.0" step="0.1" value="1.0">
+
+        <button id="singleShot">单击射出一张</button>
+        <button id="continuousShot">长按连续射出</button>
+    </div>
+    <script type="module">
+        // 导入Three.js和附加库
+        import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+        import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/OrbitControls.js';
+
+        let scene, camera, renderer, moneyGun, particles = [];
+        let shootInterval = 500; // 初始的射击间隔（毫秒）
+        let bulletSpeed = 1.0; // 初始的子弹速度
+        let continuousIntervalId;
+
+        function init() {
+            // 创建场景、相机和渲染器
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1, 3);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // 添加轨道控制器
+            const controls = new OrbitControls(camera, renderer.domElement);
+
+            // 添加环境光
+            const ambientLight = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambientLight);
+
+            // 添加方向光
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            // 加载喷钱枪模型
+            const gunLoader = new GLTFLoader();
+            gunLoader.load('gang.glb', (gltf) => {
+                moneyGun = gltf.scene;
+                moneyGun.scale.set(1.0, 1.0, 1.0);
+                moneyGun.position.set(0, 0, 0);
+                scene.add(moneyGun);
+            });
+
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+
+            // 绑定滑块事件
+            document.getElementById("intervalRange").addEventListener('input', (event) => {
+                shootInterval = parseInt(event.target.value);
+                document.getElementById("intervalValue").textContent = shootInterval;
+            });
+
+            document.getElementById("speedRange").addEventListener('input', (event) => {
+                bulletSpeed = parseFloat(event.target.value);
+                document.getElementById("speedValue").textContent = bulletSpeed.toFixed(1);
+            });
+
+            // 单击射出一张纸币
+            document.getElementById("singleShot").addEventListener('click', shootMoney);
+
+            // 长按连续射出纸币
+            const continuousButton = document.getElementById("continuousShot");
+            continuousButton.addEventListener('mousedown', () => {
+                continuousIntervalId = setInterval(shootMoney, shootInterval);
+            });
+
+            continuousButton.addEventListener('mouseup', () => {
+                clearInterval(continuousIntervalId);
+            });
+
+            continuousButton.addEventListener('mouseleave', () => {
+                clearInterval(continuousIntervalId);
+            });
+        }
+
+        // 获取枪口的位置
+        function getGunMouthPosition() {
+            const gunPosition = new THREE.Vector3();
+            if (moneyGun) {
+                moneyGun.getWorldPosition(gunPosition); // 获取枪的世界坐标位置
+                const offset = new THREE.Vector3(0, 0, -1.0); // 自定义偏移量以确定枪口位置
+                gunPosition.add(offset);
+            }
+            return gunPosition;
+        }
+
+        // 射击纸币
+        function shootMoney() {
+            const loader = new GLTFLoader();
+            loader.load('dan.glb', (gltf) => {
+                const particle = gltf.scene;
+                particle.scale.set(1.0,1.0,1.0); // 调整纸币的大小
+
+                const gunMouthPosition = getGunMouthPosition();
+                particle.position.copy(gunMouthPosition);
+
+                // 设置纸币发射的随机方向和速度
+                const randomDirection = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.5,
+                    (Math.random() - 0.5) * 0.5,
+                    -(Math.random() * bulletSpeed)
+                );
+                particle.userData.velocity = randomDirection;
+
+                scene.add(particle);
+                particles.push(particle);
+            });
+        }
+
+        // 响应窗口大小调整
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 更新每个纸币的位置
+            particles.forEach((particle) => {
+                particle.position.add(particle.userData.velocity);
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        init(); // 初始化应用程序
+    </script>
+</body>
+</html>
+
